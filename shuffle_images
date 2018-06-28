@@ -1,0 +1,12 @@
+#!/bin/sh
+
+. frame_functions
+
+sd_switch on
+mount_sd_card
+
+unshuffle_images
+shuffle_images
+
+unmount_sd_card
+sd_switch off

@@ -1,0 +1,182 @@
+. frame_configuration
+
+function fail() {
+  error_message="$1"
+  if [ -n "$error_message" ]; then
+    echo $error_message
+  fi
+  umount $SD_CARD_MOUNT_POINT
+  sd_switch off
+  exit 1
+}
+
+function mount_sd_card() {
+  [ -b "$SD_CARD_DEVICE" ] || fail "Can't find SD card at $SD_CARD_DEVICE"
+  [ -d "$SD_CARD_MOUNT_POINT" ] || fail "The specified mount point ($SD_CARD_MOUNT_POINT) is not a directory"
+  ! mount | grep -q $SD_CARD_DEVICE || fail "$SD_CARD_DEVICE is already mounted"
+
+  mount $SD_CARD_DEVICE "$SD_CARD_MOUNT_POINT" || fail "Could not mount $SD_CARD_DEVICE at $SD_CARD_MOUNT_POINT"
+}
+
+function unmount_sd_card() {
+  if mount | grep -q $SD_CARD_DEVICE; then
+    umount "$SD_CARD_MOUNT_POINT"
+  fi
+}
+
+function sd_switch() {
+  [ "$1" == "on" ] || [ "$1" == "off" ] || fail "Invalid SD switch action $1"
+  [ -e $SYSFS_SD_CARD_SWITCH ] || fail "sysfs SD switch not available ($SYSFS_SD_CARD_SWITCH)"
+
+  action="$1"
+  current_switch_value=`cat $SYSFS_SD_CARD_SWITCH`
+
+  if [ $action == "on" ]; then
+    target_switch_value=0
+  else
+    target_switch_value=1
+  fi
+
+  if [ $current_switch_value != $target_switch_value ]; then
+    echo $target_switch_value > $SYSFS_SD_CARD_SWITCH
+    sleep 5
+  fi
+}
+
+function get_seafile_auth_token() {
+  if [ -z "$SEAFILE_AUTH_TOKEN" ]; then
+    SEAFILE_AUTH_TOKEN=`curl --silent --insecure -d "username=$SEAFILE_USERNAME&password=$SEAFILE_PASSWORD" $SEAFILE_URL/api2/auth-token/ | jsonfilter -e '@.token'`
+  fi
+
+  [ `echo -n $SEAFILE_AUTH_TOKEN | wc -c` == 40 ] || fail "Invalid seafile authentication token '$SEAFILE_AUTH_TOKEN'"
+  echo $SEAFILE_AUTH_TOKEN
+}
+
+function verify_seafile_server_is_reachable() {
+  get_seafile_auth_token > /dev/null
+}
+
+function remove_images_not_in_seafile_library() {
+  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
+  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+
+  auth_token=`get_seafile_auth_token`
+  server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
+
+  if [ $? -ne 0 ]; then
+      fail "Can't get file list from seafile server"
+  fi
+
+  find "$image_directory" -maxdepth 1 -type f | shuf | while read line; do
+    # Executed in a sub shell
+    local_file_name=`basename "$line"`
+    jsonfilter -s "$server_file_list" -e "@.*.name" | while read server_file_name; do
+      if [ "$local_file_name" = "$server_file_name" ]; then
+        exit 188
+      fi
+    done
+
+    if [ $? -ne 188 ]; then
+      echo Removing "$local_file_name"
+      rm -f "$image_directory/$local_file_name"
+    fi
+  done
+}
+
+function url_encode() {
+  echo "$1" | sed \
+    -e "s/%/%25/g" \
+    -e "s/ /%20/g"
+
+#    -e "s/!/%21/g" \
+#    -e 's/"/%22/g' \
+#    -e "s/#/%23/g" \
+#    -e "s/\\$/%24/g" \
+#    -e "s/&/%26/g" \
+#    -e "s/'/%27/g" \
+#    -e "s/(/%28/g" \
+#    -e "s/)/%29/g" \
+#    -e "s/\\*/%2a/g" \
+#    -e "s/\\+/%2b/g" \
+#    -e "s/,/%2c/g" \
+#    -e "s/-/%2d/g" \
+#    -e "s/\./%2e/g" \
+#    -e "s#/#%2f#g" \
+#    -e "s/:/%3a/g" \
+#    -e "s/;/%3b/g" \
+#    -e 's/\\</%3c/g' \
+#    -e 's/\\>/%3e/g' \
+#    -e "s/=/%3d/g" \
+#    -e "s/?/%3f/g" \
+#    -e "s/@/%40/g" \
+#    -e "s/\\[/%5b/g" \
+#    -e "s/\\]/%5d/g" \
+#    -e "s/\\\/%5c/g" \
+#    -e "s/\\^/%5e/g" \
+#    -e "s/_/%5f/g" \
+#    -e 's/`/%60/g' \
+#    -e "s/{/%7b/g" \
+#    -e "s/|/%7c/g" \
+#    -e "s/}/%7d/g" \
+#    -e "s/~/%7e/g"
+}
+
+function download_images_from_seafile_library() {
+  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
+  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+
+  auth_token=`get_seafile_auth_token`
+  server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
+  server_file_names=`jsonfilter -s "$server_file_list" -e "@.*.name"`
+  jsonfilter -s "$server_file_list" -e "@.*.name" | while read file_name; do
+    # Executed in a sub shell
+    cd $image_directory
+    if [ -e "$file_name" ]; then
+      local_file_size=`stat --printf %s "$file_name"`
+      server_file_size=`jsonfilter -s "$server_file_list" -e "@[@.name='$file_name'].size"`
+      local_file_mtime=`stat --printf %Y "$file_name"`
+      server_file_mtime=`jsonfilter -s "$server_file_list" -e "@[@.name='$file_name'].mtime"`
+
+      if [ "$server_file_size" = "$local_file_size" -a \
+         "$server_file_mtime" -lt "$local_file_mtime" ]; then
+        echo "File already up to date: '$file_name'"
+        continue
+      fi
+    fi
+
+    url_encoded_file_name=`url_encode "$file_name"`
+    download_url=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" "$SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/file/?p=/$url_encoded_file_name"`
+    echo Downloading $download_url
+    curl --insecure -o "$file_name" `echo $download_url | tr -d '"'`
+  done
+}
+
+function shuffle_images() {
+  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
+  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+
+  unshuffle_images
+
+  counter=0
+  find "$image_directory" -maxdepth 1 -type f ! -name "unshuffle.sh" | shuf | while read line; do
+    # Executed in a sub shell
+    cd $image_directory
+    filename=`basename "$line"`
+    mv "$filename" "`printf '%04d' $counter`_$filename"
+    echo mv "'`printf '%04d' $counter`_$filename'" "'$filename'" >> unshuffle.sh
+
+    let counter=$counter+1
+  done
+}
+
+function unshuffle_images() {
+  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
+  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+
+  cd $image_directory
+  if [ -f unshuffle.sh ]; then
+    /bin/sh unshuffle.sh
+    rm -f unshuffle.sh
+  fi
+  cd -
+}

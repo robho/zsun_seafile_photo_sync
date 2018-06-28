@@ -1,0 +1,10 @@
+SD_CARD_DEVICE=/dev/sda1
+SD_CARD_MOUNT_POINT=/mnt
+SD_CARD_IMAGE_DIRECTORY=images
+
+SYSFS_SD_CARD_SWITCH=/sys/class/gpio/gpio21/value
+
+SEAFILE_URL=https://seafile.example.com
+SEAFILE_USERNAME=user@example.com
+SEAFILE_PASSWORD=your_password
+SEAFILE_IMAGE_REPO=a2d03653-ffda-423f-ac43-7e215b8134c8

@@ -1,0 +1,16 @@
+#!/bin/sh
+
+. frame_functions
+
+if [ $# != 1 ] || ([ "$1" != "on" ] && [ "$1" != "off" ]); then
+  echo "Usage: $0 <on|off>"
+  exit 1
+fi
+
+if mount | grep -q /dev/sda; then
+  echo "SD card is mounted"
+  exit 1
+fi
+
+sd_switch $1
+

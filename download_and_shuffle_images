@@ -1,0 +1,18 @@
+#!/bin/sh
+
+. frame_functions
+
+verify_seafile_server_is_reachable
+
+sd_switch on
+mount_sd_card
+
+unshuffle_images
+
+remove_images_not_in_seafile_library
+download_images_from_seafile_library
+
+shuffle_images
+
+unmount_sd_card
+sd_switch off
