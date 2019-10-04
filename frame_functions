@@ -15,6 +15,7 @@ function mount_sd_card() {
   [ -d "$SD_CARD_MOUNT_POINT" ] || fail "The specified mount point ($SD_CARD_MOUNT_POINT) is not a directory"
   ! mount | grep -q $SD_CARD_DEVICE || fail "$SD_CARD_DEVICE is already mounted"
 
+  fsck.fat -a $SD_CARD_DEVICE
   mount $SD_CARD_DEVICE "$SD_CARD_MOUNT_POINT" || fail "Could not mount $SD_CARD_DEVICE at $SD_CARD_MOUNT_POINT"
 }
 
