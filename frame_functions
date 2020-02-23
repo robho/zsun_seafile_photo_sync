@@ -1,4 +1,4 @@
-. frame_configuration
+. ./frame_configuration
 
 function fail() {
   error_message="$1"

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. frame_functions
+. ./frame_functions
 
 sd_switch on
 mount_sd_card

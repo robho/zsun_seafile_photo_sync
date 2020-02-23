@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. frame_functions
+. ./frame_functions
 
 verify_seafile_server_is_reachable
 
