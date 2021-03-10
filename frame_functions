@@ -17,6 +17,7 @@ function mount_sd_card() {
 
   fsck.fat -a $SD_CARD_DEVICE
   mount $SD_CARD_DEVICE "$SD_CARD_MOUNT_POINT" || fail "Could not mount $SD_CARD_DEVICE at $SD_CARD_MOUNT_POINT"
+  rm -f "$SD_CARD_MOUNT_POINT"/fsck????.rec
 }
 
 function unmount_sd_card() {
