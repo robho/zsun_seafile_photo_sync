@@ -5,6 +5,7 @@ function fail() {
   if [ -n "$error_message" ]; then
     echo $error_message
   fi
+  disable_swap
   umount $SD_CARD_MOUNT_POINT
   sd_switch off
   exit 1
@@ -23,6 +24,18 @@ function mount_sd_card() {
 function unmount_sd_card() {
   if mount | grep -q $SD_CARD_DEVICE; then
     umount "$SD_CARD_MOUNT_POINT"
+  fi
+}
+
+function enable_swap() {
+  [ -f $SD_CARD_SWAP_FILE ] || fail "Swap file $SD_CARD_SWAP_FILE doesn't exist"
+
+  swapon $SD_CARD_SWAP_FILE
+}
+
+function disable_swap() {
+  if swapon -s | grep -q $SD_CARD_SWAP_FILE; then
+    swapoff $SD_CARD_SWAP_FILE
   fi
 }
 
@@ -59,28 +72,29 @@ function verify_seafile_server_is_reachable() {
 }
 
 function remove_images_not_in_seafile_library() {
-  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
-  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+  [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
+  [ $? == 0 ] || fail "Can't get file list from seafile server"
 
-  if [ $? -ne 0 ]; then
-      fail "Can't get file list from seafile server"
-  fi
-
-  find "$image_directory" -maxdepth 1 -type f | shuf | while read line; do
+  find "$SD_CARD_IMAGE_DIRECTORY" -maxdepth 1 -type f | while read line; do
     # Executed in a sub shell
+
+    if [ "$line" == "$SD_CARD_SWAP_FILE" ]; then
+      continue
+    fi
+
     local_file_name=`basename "$line"`
     echo "$server_file_list" | jsonfilter -e "@.*.name" | while read server_file_name; do
-      if [ "$local_file_name" = "$server_file_name" ]; then
+      if [ "$local_file_name" == "$server_file_name" ]; then
         exit 188
       fi
     done
 
-    if [ $? -ne 188 ]; then
+    if [ $? != 188 ]; then
       echo Removing "$local_file_name"
-      rm -f "$image_directory/$local_file_name"
+      rm -f "$SD_CARD_IMAGE_DIRECTORY/$local_file_name"
     fi
   done
 }
@@ -123,46 +137,65 @@ function url_encode() {
 #    -e "s/~/%7e/g"
 }
 
-function download_images_from_seafile_library() {
-  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
-  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+function download_and_process_images_from_seafile_library() {
+  [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   server_file_names=`echo "$server_file_list" | jsonfilter -e "@.*.name"`
   echo "$server_file_names" | while read file_name; do
     # Executed in a sub shell
-    cd $image_directory
+
+    echo "$file_name"
+
+    cd $SD_CARD_IMAGE_DIRECTORY
     if [ -e "$file_name" ]; then
-      local_file_size=`stat --printf %s "$file_name"`
-      server_file_size=`echo "$server_file_list" | jsonfilter -e "@[@.name='$file_name'].size"`
       local_file_mtime=`stat --printf %Y "$file_name"`
       server_file_mtime=`echo "$server_file_list" | jsonfilter -e "@[@.name='$file_name'].mtime"`
 
-      if [ "$server_file_size" = "$local_file_size" -a \
-         "$server_file_mtime" -lt "$local_file_mtime" ]; then
-        echo "File already up to date: '$file_name'"
+      if [ "$server_file_mtime" -lt "$local_file_mtime" ]; then
+        echo "  - already up to date"
         continue
       fi
     fi
 
     url_encoded_file_name=`url_encode "$file_name"`
     download_url=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" "$SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/file/?p=/$url_encoded_file_name"`
-    echo Downloading $download_url
-    curl --insecure -o "$file_name" `echo $download_url | tr -d '"'`
+    temp_file="$SD_CARD_TMP_DIRECTORY/downloaded.tmp"
+
+    echo "  - downloading..."
+    curl --insecure --silent `echo $download_url | tr -d '"'` -o $temp_file
+    if [ $? == 0 ]; then
+      current_orientation=`gm identify -format '%[EXIF:orientation]' $temp_file`
+      if [ $? == 0 ] && [ -n "$current_orientation" ] && \
+         [ "$current_orientation" != "unknown" ] && [ "$current_orientation" -gt 4 ]; then
+        # 90 or 270 degrees rotation
+        resize_resolution=`echo $FRAME_RESOLUTION | awk -Fx '{print $2"x"$1}'`
+      else
+        resize_resolution=$FRAME_RESOLUTION
+      fi
+
+      echo "  - resizing and rotating..."
+      MAGICK_TMPDIR="$SD_CARD_TMP_DIRECTORY" gm convert -scale $resize_resolution -auto-orient $temp_file "$file_name"
+    fi
+    rm -f $temp_file
   done
 }
 
 function shuffle_images() {
-  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
-  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+  [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
   unshuffle_images
 
   counter=0
-  find "$image_directory" -maxdepth 1 -type f ! -name "unshuffle.sh" | shuf | while read line; do
+  find "$SD_CARD_IMAGE_DIRECTORY" -maxdepth 1 -type f ! -name "unshuffle.sh" | shuf | while read line; do
     # Executed in a sub shell
-    cd $image_directory
+
+    if [ "$line" == "$SD_CARD_SWAP_FILE" ]; then
+      continue
+    fi
+
+    cd $SD_CARD_IMAGE_DIRECTORY
     filename=`basename "$line"`
     mv "$filename" "`printf '%04d' $counter`_$filename"
     echo mv "'`printf '%04d' $counter`_$filename'" "'$filename'" >> unshuffle.sh
@@ -172,13 +205,13 @@ function shuffle_images() {
 }
 
 function unshuffle_images() {
-  image_directory="$SD_CARD_MOUNT_POINT/$SD_CARD_IMAGE_DIRECTORY"
-  [ -d "$image_directory" ] || fail "Can't find image directory '$image_directory'"
+  [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
-  cd $image_directory
-  if [ -f unshuffle.sh ]; then
-    /bin/sh unshuffle.sh
-    rm -f unshuffle.sh
-  fi
-  cd -
+  ( # Use a sub shell to avoid messing up pwd
+    cd $SD_CARD_IMAGE_DIRECTORY
+    if [ -f unshuffle.sh ]; then
+      /bin/sh unshuffle.sh
+      rm -f unshuffle.sh
+    fi
+  )
 }

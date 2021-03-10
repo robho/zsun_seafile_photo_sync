@@ -6,13 +6,15 @@ verify_seafile_server_is_reachable
 
 sd_switch on
 mount_sd_card
+enable_swap
 
 unshuffle_images
 
 remove_images_not_in_seafile_library
-download_images_from_seafile_library
+download_and_process_images_from_seafile_library
 
 shuffle_images
 
+disable_swap
 unmount_sd_card
 sd_switch off

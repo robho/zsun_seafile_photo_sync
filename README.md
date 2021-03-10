@@ -10,12 +10,11 @@ random display order is very deterministic.
 
 # Installation instructions
 
-Install OpenWrt / LEDE to the wifi card reader. See:
+Install OpenWrt 19.07.3 to the wifi card reader. See:
 * https://wiki.hackerspace.pl/projects:zsun-wifi-card-reader
-* https://forum.lede-project.org/t/supporting-zsun-wifi-card-reader-16mb-flash-64mb-ram-ar9331/2142/71
+* https://forum.openwrt.org/t/supporting-zsun-wifi-card-reader-16mb-flash-64mb-ram-ar9331/2142
 
-Install additional OpenWrt packages. These can be fetched from the
-LEDE repositories:
+Install additional OpenWrt packages:
 
 block-mount
 coreutils
@@ -23,10 +22,7 @@ coreutils-shuf
 coreutils-stat
 curl
 dosfstools
-libcurl
-libmbedtls
-
-These you can extract from the image builder archive:
+graphicsmagick
 kmod-fs-vfat
 kmod-nls-base
 kmod-nls-cp437
@@ -36,6 +32,8 @@ kmod-scsi-core
 kmod-usb-core
 kmod-usb-storage
 kmod-usb2
+libcurl
+libmbedtls
 
 Next, copy the scripts to your zsun device, update the configuration
 and set up a cron job or init script to download and shuffle the
