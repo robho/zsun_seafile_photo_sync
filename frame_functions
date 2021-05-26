@@ -74,6 +74,8 @@ function verify_seafile_server_is_reachable() {
 function remove_images_not_in_seafile_library() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
+  echo "Removing files which have been removed on server..."
+
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   [ $? == 0 ] || fail "Can't get file list from seafile server"
@@ -140,6 +142,8 @@ function url_encode() {
 function download_and_process_images_from_seafile_library() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
+  echo "Downloading and processing images from server..."
+
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   server_file_names=`echo "$server_file_list" | jsonfilter -e "@.*.name"`
@@ -185,6 +189,8 @@ function download_and_process_images_from_seafile_library() {
 function shuffle_images() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
+  echo "Shuffling images..."
+
   unshuffle_images
 
   counter=0
@@ -206,6 +212,8 @@ function shuffle_images() {
 
 function unshuffle_images() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
+
+  echo "Unshuffling images..."
 
   ( # Use a sub shell to avoid messing up pwd
     cd $SD_CARD_IMAGE_DIRECTORY
