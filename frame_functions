@@ -79,6 +79,7 @@ function remove_images_not_in_seafile_library() {
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   [ $? == 0 ] || fail "Can't get file list from seafile server"
+  server_file_names=`echo "$server_file_list" | jsonfilter -e "@.*.name"`
 
   find "$SD_CARD_IMAGE_DIRECTORY" -maxdepth 1 -type f | while read line; do
     # Executed in a sub shell
@@ -88,7 +89,7 @@ function remove_images_not_in_seafile_library() {
     fi
 
     local_file_name=`basename "$line"`
-    echo "$server_file_list" | jsonfilter -e "@.*.name" | while read server_file_name; do
+    echo "$server_file_names" | while read server_file_name; do
       if [ "$local_file_name" == "$server_file_name" ]; then
         exit 188
       fi
