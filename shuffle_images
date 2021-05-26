@@ -5,7 +5,6 @@
 sd_switch on
 mount_sd_card
 
-unshuffle_images
 shuffle_images
 
 unmount_sd_card
