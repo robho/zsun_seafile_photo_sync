@@ -34,7 +34,7 @@ function enable_swap() {
 }
 
 function disable_swap() {
-  if swapon -s | grep -q $SD_CARD_SWAP_FILE; then
+  if grep -q $SD_CARD_SWAP_FILE /proc/swaps; then
     swapoff $SD_CARD_SWAP_FILE
   fi
 }
@@ -60,7 +60,7 @@ function sd_switch() {
 
 function get_seafile_auth_token() {
   if [ -z "$SEAFILE_AUTH_TOKEN" ]; then
-    SEAFILE_AUTH_TOKEN=`curl --silent --insecure -d "username=$SEAFILE_USERNAME&password=$SEAFILE_PASSWORD" $SEAFILE_URL/api2/auth-token/ | jsonfilter -e '@.token'`
+    SEAFILE_AUTH_TOKEN=`curl --silent -d "username=$SEAFILE_USERNAME&password=$SEAFILE_PASSWORD" $SEAFILE_URL/api2/auth-token/ | jsonfilter -e '@.token'`
   fi
 
   [ `echo -n $SEAFILE_AUTH_TOKEN | wc -c` == 40 ] || fail "Invalid seafile authentication token '$SEAFILE_AUTH_TOKEN'"
@@ -77,7 +77,7 @@ function remove_images_not_in_seafile_library() {
   echo "Removing files which have been removed on server..."
 
   auth_token=`get_seafile_auth_token`
-  server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
+  server_file_list=`curl --silent -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   [ $? == 0 ] || fail "Can't get file list from seafile server"
   server_file_names=`echo "$server_file_list" | jsonfilter -e "@.*.name"`
 
@@ -142,11 +142,12 @@ function url_encode() {
 
 function download_and_process_images_from_seafile_library() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
+  mkdir -p "$SD_CARD_TMP_DIRECTORY" || fail "Can't create temporary download directory '$SD_CARD_TMP_DIRECTORY'"
 
   echo "Downloading and processing images from server..."
 
   auth_token=`get_seafile_auth_token`
-  server_file_list=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
+  server_file_list=`curl --silent -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
   server_file_names=`echo "$server_file_list" | jsonfilter -e "@.*.name"`
   echo "$server_file_names" | while read file_name; do
     # Executed in a sub shell
@@ -165,11 +166,11 @@ function download_and_process_images_from_seafile_library() {
     fi
 
     url_encoded_file_name=`url_encode "$file_name"`
-    download_url=`curl --silent --insecure -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" "$SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/file/?p=/$url_encoded_file_name"`
+    download_url=`curl --silent -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" "$SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/file/?p=/$url_encoded_file_name"`
     temp_file="$SD_CARD_TMP_DIRECTORY/downloaded.tmp"
 
     echo "  - downloading..."
-    curl --insecure --silent `echo $download_url | tr -d '"'` -o $temp_file
+    curl --silent `echo $download_url | tr -d '"'` -o $temp_file
     if [ $? == 0 ]; then
       current_orientation=`gm identify -format '%[EXIF:orientation]' $temp_file`
       if [ $? == 0 ] && [ -n "$current_orientation" ] && \
@@ -182,6 +183,8 @@ function download_and_process_images_from_seafile_library() {
 
       echo "  - resizing and rotating..."
       MAGICK_TMPDIR="$SD_CARD_TMP_DIRECTORY" gm convert -scale $resize_resolution -auto-orient $temp_file "$file_name"
+    else
+      echo "    FAILED"
     fi
     rm -f $temp_file
   done
@@ -190,9 +193,8 @@ function download_and_process_images_from_seafile_library() {
 function shuffle_images() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
-  echo "Shuffling images..."
-
   unshuffle_images
+  echo "Shuffling images..."
 
   counter=0
   find "$SD_CARD_IMAGE_DIRECTORY" -maxdepth 1 -type f ! -name "unshuffle.sh" | shuf | while read line; do
@@ -214,11 +216,10 @@ function shuffle_images() {
 function unshuffle_images() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
-  echo "Unshuffling images..."
-
   ( # Use a sub shell to avoid messing up pwd
     cd $SD_CARD_IMAGE_DIRECTORY
     if [ -f unshuffle.sh ]; then
+      echo "Unshuffling images..."
       /bin/sh unshuffle.sh
       rm -f unshuffle.sh
     fi
