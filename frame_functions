@@ -156,12 +156,16 @@ function download_and_process_images_from_seafile_library() {
 
     cd $SD_CARD_IMAGE_DIRECTORY
     if [ -e "$file_name" ]; then
-      local_file_mtime=`stat --printf %Y "$file_name"`
-      server_file_mtime=`echo "$server_file_list" | jsonfilter -e "@[@.name='$file_name'].mtime"`
+      if [ `stat --printf %s "$file_name"` -eq 0 ]; then
+        echo "  - corrupt, zero sized file"
+      else
+        local_file_mtime=`stat --printf %Y "$file_name"`
+        server_file_mtime=`echo "$server_file_list" | jsonfilter -e "@[@.name='$file_name'].mtime"`
 
-      if [ "$server_file_mtime" -lt "$local_file_mtime" ]; then
-        echo "  - already up to date"
-        continue
+        if [ "$server_file_mtime" -lt "$local_file_mtime" ]; then
+          echo "  - already up to date"
+          continue
+        fi
       fi
     fi
 
