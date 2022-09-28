@@ -18,7 +18,7 @@ function mount_sd_card() {
 
   fsck.fat -a $SD_CARD_DEVICE
   mount $SD_CARD_DEVICE "$SD_CARD_MOUNT_POINT" || fail "Could not mount $SD_CARD_DEVICE at $SD_CARD_MOUNT_POINT"
-  rm -f "$SD_CARD_MOUNT_POINT"/fsck????.rec
+  find "$SD_CARD_MOUNT_POINT" -iname "fsck????.rec" -print0 | xargs -0 rm -f
 }
 
 function unmount_sd_card() {
@@ -74,7 +74,7 @@ function verify_seafile_server_is_reachable() {
 function remove_images_not_in_seafile_library() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
-  echo "Removing files which have been removed on server..."
+  echo "Removing files that have been removed on server..."
 
   auth_token=`get_seafile_auth_token`
   server_file_list=`curl --silent -H "Authorization: Token $auth_token" -H "Accept: application/json; charset=utf-8; indent=4" $SEAFILE_URL/api2/repos/$SEAFILE_IMAGE_REPO/dir/?p=/`
