@@ -11,10 +11,24 @@ function fail() {
   exit 1
 }
 
+function get_device_mount_point() {
+  device="$1"
+  egrep "^$device" /proc/mounts | awk '{print $2}'
+}
+
 function mount_sd_card() {
-  [ -b "$SD_CARD_DEVICE" ] || fail "Can't find SD card at $SD_CARD_DEVICE"
+  [ -b "$SD_CARD_DEVICE" ] || fail "Can't find SD card device $SD_CARD_DEVICE"
   [ -d "$SD_CARD_MOUNT_POINT" ] || fail "The specified mount point ($SD_CARD_MOUNT_POINT) is not a directory"
-  ! mount | grep -q $SD_CARD_DEVICE || fail "$SD_CARD_DEVICE is already mounted"
+
+  current_mount_point=`get_device_mount_point "$SD_CARD_DEVICE"`
+  if [ -n "$current_mount_point" ]; then
+    if [ "$current_mount_point" != "$SD_CARD_MOUNT_POINT" ]; then
+      fail "$SD_CARD_DEVICE is already mounted at $current_mount_point"
+    fi
+
+    # Already mounted at the requested location
+    return
+  fi
 
   fsck.fat -a $SD_CARD_DEVICE
   mount $SD_CARD_DEVICE "$SD_CARD_MOUNT_POINT" || fail "Could not mount $SD_CARD_DEVICE at $SD_CARD_MOUNT_POINT"
@@ -22,7 +36,8 @@ function mount_sd_card() {
 }
 
 function unmount_sd_card() {
-  if mount | grep -q $SD_CARD_DEVICE; then
+  current_mount_point=`get_device_mount_point "$SD_CARD_DEVICE"`
+  if [ "$current_mount_point" == "$SD_CARD_MOUNT_POINT" ]; then
     umount "$SD_CARD_MOUNT_POINT"
   fi
 }
@@ -220,7 +235,7 @@ function shuffle_images() {
 function unshuffle_images() {
   [ -d "$SD_CARD_IMAGE_DIRECTORY" ] || fail "Can't find image directory '$SD_CARD_IMAGE_DIRECTORY'"
 
-  ( # Use a sub shell to avoid messing up pwd
+  ( # Use a sub shell to avoid messing up cwd
     cd $SD_CARD_IMAGE_DIRECTORY
     if [ -f unshuffle.sh ]; then
       echo "Unshuffling images..."
