@@ -7,9 +7,6 @@ SD_CARD_SWAP_FILE="$SD_CARD_MOUNT_POINT/.swapfile"
 SYSFS_SD_CARD_SWITCH=/sys/class/gpio/sdreader_switch/value
 
 SEAFILE_URL=https://seafile.example.com
-SEAFILE_USERNAME=user@example.com
-SEAFILE_PASSWORD=your_password
-SEAFILE_IMAGE_REPO=a2d03653-ffda-423f-ac43-7e215b8134c8
+SEAFILE_LIBRARY_API_TOKEN=your_library_api_token_here
 
 FRAME_RESOLUTION=1366x768
-
