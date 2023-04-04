@@ -151,11 +151,11 @@ function download_and_process_images_from_seafile_library() {
 
   echo "Downloading and processing images from server..."
 
-  server_file_list=`curl --silent --header "Authorization: Token $SEAFILE_LIBRARY_API_TOKEN" --header "Accept: application/json" $SEAFILE_URL/api/v2.1/via-repo-token/dir/`
-  server_file_names=`echo "$server_file_list" | jsonfilter -e "@.dirent_list.*.name"`
-  echo "$server_file_names" | while read file_name; do
+  server_file_data=`curl --silent --header "Authorization: Token $SEAFILE_LIBRARY_API_TOKEN" --header "Accept: application/json" $SEAFILE_URL/api/v2.1/via-repo-token/dir/`
+  echo "$server_file_data" | jsonfilter -e "@.dirent_list.*" | while read file_data; do
     # Executed in a sub shell
 
+    file_name=`echo "$file_data" | jsonfilter -e '$.name'`
     echo "$file_name"
 
     cd $SD_CARD_IMAGE_DIRECTORY
@@ -164,7 +164,7 @@ function download_and_process_images_from_seafile_library() {
         echo "  - corrupt, zero sized file"
       else
         local_file_mtime=`stat --printf %Y "$file_name"`
-        server_file_mtime_iso=`echo "$server_file_list" | jsonfilter -e "@.dirent_list[@.name='$file_name'].mtime"`
+        server_file_mtime_iso=`echo "$file_data" | jsonfilter -e '$.mtime'`
         server_file_mtime_busybox=`echo "$server_file_mtime_iso" | sed "s/T/ /"`
         server_file_mtime=`date -d "$server_file_mtime_busybox" +%s`
 
