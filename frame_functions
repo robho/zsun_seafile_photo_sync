@@ -94,13 +94,7 @@ function remove_images_not_in_seafile_library() {
     fi
 
     local_file_name=`basename "$line"`
-    echo "$server_file_names" | while read server_file_name; do
-      if [ "$local_file_name" == "$server_file_name" ]; then
-        exit 188
-      fi
-    done
-
-    if [ $? != 188 ]; then
+    if ! echo "$server_file_names" | grep -q "^$local_file_name$"; then
       echo Removing "$local_file_name"
       rm -f "$SD_CARD_IMAGE_DIRECTORY/$local_file_name"
     fi
